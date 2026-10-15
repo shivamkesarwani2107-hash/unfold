@@ -111,14 +111,14 @@ function Payment() {
         throw new Error(orderData.message || "Failed to initialize payment.");
       }
 
-      const { orderId, keyId, upiIntentUri: intentUri, mode } = orderData;
+      const { orderId, keyId, upiIntentUri: intentUri } = orderData;
       if (intentUri) setUpiIntentUri(intentUri);
 
-      // Step 2: Handle Razorpay Gateway or Direct UPI
-      if (mode === "razorpay" && keyId && window.Razorpay) {
+      // Step 2: Handle Genuine Razorpay UPI Gateway Flow
+      if (keyId && window.Razorpay) {
         const options = {
           key: keyId,
-          amount: 1900, // 1900 paise = ₹19
+          amount: 1900, // 1900 paise = ₹19.00 INR
           currency: "INR",
           name: "Unfold",
           description: `Personalized Greeting for ${recipient || "Someone Special"}`,
@@ -146,6 +146,7 @@ function Payment() {
             },
           },
           handler: async (paymentResponse) => {
+            // Strictly send gateway response to backend for cryptographic signature verification
             await verifyBackendPayment({
               orderId: paymentResponse.razorpay_order_id || orderId,
               paymentId: paymentResponse.razorpay_payment_id,
@@ -162,24 +163,15 @@ function Payment() {
         const razorpayInstance = new window.Razorpay(options);
         razorpayInstance.on("payment.failed", (failedRes) => {
           setErrorMessage(
-            failedRes.error?.description || "Payment failed. Please try again."
+            failedRes.error?.description || "Payment was cancelled or failed. Please try again."
           );
           setLoading(false);
         });
         razorpayInstance.open();
       } else {
-        // Direct UPI Mode: If user is on mobile, launch UPI app or verify confirmation
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        if (isMobile && intentUri) {
-          window.location.href = intentUri;
-        }
-
-        // Verify order on backend
-        await verifyBackendPayment({
-          orderId,
-          paymentId: `pay_upi_${Date.now()}`,
-          signature: "",
-        });
+        throw new Error(
+          "Razorpay payment gateway checkout is loading or not configured on the backend. Please check RAZORPAY_KEY_ID in backend configuration."
+        );
       }
     } catch (error) {
       console.error("Payment error:", error);
